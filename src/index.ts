@@ -1,5 +1,5 @@
 const HELP = `群内安价收集(ak是アンカー罗马字缩写)
-“.ak”也可以换成“.安价”
+“.ak”也可以换成“.安价”，//后面是注释，不用写
 
 .ak help //查看帮助
 .ak#标题 //新建一轮分歧并设标题
@@ -16,14 +16,14 @@ const OPTION_NUM_PER_PAGE = 15;//列出所有选项时，每页放多少个选�
 
 /**
  * 读取指定群聊的安价池
- * @param groupId 
- * @param ext 
+ * @param groupId 群号
+ * @param ext 扩展信息对象
  * @returns 
  */
-function loadPool(groupId:string,ext: seal.ExtInfo,title="") {
+function loadPool(groupId:string,ext: seal.ExtInfo) {
   const emptyData = {
     [groupId]:{
-      title: title,
+      title: "",
       options:[]
     }
   }
@@ -32,8 +32,8 @@ function loadPool(groupId:string,ext: seal.ExtInfo,title="") {
         title: string;
         options: string[];
     };
-  } = title ? emptyData : JSON.parse(ext.storageGet(STORAGE_KEY) || JSON.stringify(emptyData));
-  return data[groupId];
+  } = JSON.parse(ext.storageGet(STORAGE_KEY) || JSON.stringify(emptyData));
+  return data[groupId] ?? emptyData[groupId];//如果没有，那么就新建一个安价池
 }
 
 //写入指定群聊的安价池
@@ -59,7 +59,13 @@ function dumpPool(groupId: string, ext: seal.ExtInfo,pool:{title: string;options
 
 //新建分歧
 function akNew(ctx: seal.MsgContext, msg: seal.Message, ext: seal.ExtInfo, title: string) {
-  const pool = loadPool(ctx.group.groupId, ext,title);
+  const pool = loadPool(ctx.group.groupId, ext);
+  if (pool.options.length > 0 || pool.title !== '') {
+    //如果之前还有安价未结算，则先询问
+    seal.replyToSender(ctx, msg, `当前分歧：${pool.title}\n请等本次安价结算之后再开新安价`);
+    return;
+  }
+  pool.title = title;
   dumpPool(ctx.group.groupId, ext, pool);
   seal.replyToSender(ctx, msg, `已新建分歧:${title}`);
 }
@@ -67,8 +73,18 @@ function akNew(ctx: seal.MsgContext, msg: seal.Message, ext: seal.ExtInfo, title
 //添加选项
 function akAdd(ctx: seal.MsgContext, msg: seal.Message, ext: seal.ExtInfo, option: string) {
   const pool = loadPool(ctx.group.groupId, ext);
-  pool.options = pool.options.concat(option.split("|"));
-  seal.replyToSender(ctx, msg, `当前分歧:${pool.title}\n已添加第${pool.options.length}个选项:${option}`);
+  const options = option.split("|");
+  pool.options = pool.options.concat(options);
+  if (options.length === 1) {
+    seal.replyToSender(ctx, msg, `当前分歧:${pool.title}\n已添加第${pool.options.length}个选项:${option}`);
+  } else {
+    let i = pool.options.length - options.length + 1;
+    let output = "";
+    options.forEach(value => {
+      output += `${i++}.${value}\n`;
+    });
+    seal.replyToSender(ctx, msg, `当前分歧:${pool.title}\n新添加${options.length}个选项:\n${output}`);
+  }
 
   dumpPool(ctx.group.groupId, ext, pool);
 }
@@ -132,11 +148,35 @@ function akGet(ctx: seal.MsgContext, msg: seal.Message, ext: seal.ExtInfo, num:n
   akList(ctx, msg, ext);//先列出所有选项
 
   let optStr = '';
-  for (let i = 0; i < num; ++i){
-    const r = randomInt(1, pool.options.length);
-    const result = pool.options.splice(r - 1, 1);
-    optStr += `${i + 1}.${result}\n`;
+  const resultIndexes: number[] = [];//抽中的选项们的下标
+  
+  if (num > pool.options.length) {
+    //如果需要抽的比选项数本身多，就全抽
+    num = pool.options.length;
   }
+
+  //先抽出全部序号
+  for (let i = 0; i < num; ++i){
+    let r = randomInt(1, pool.options.length);//结果的选项序号，(r - 1)才是数组下标
+    while(resultIndexes.includes(r-1)) {
+      r = randomInt(1, pool.options.length);//如果重复就重抽
+    }
+    resultIndexes.push(r-1);
+  }
+  //接着将没被抽出来的选项存到另一个数组，避免删除时选项位置变化造成无法定位。
+
+  const tempList: string[] = [];
+  pool.options.forEach((x, i) => {
+    if (resultIndexes.includes(i)) {
+      //如果是需要被删除的，那么就输出
+      optStr += `${i + 1}.${x}\n`;
+    } else {
+      //否则保存到临时数组中
+      tempList.push(x);
+    }
+  });
+  pool.options = tempList;
+  
   seal.replyToSender(ctx, msg, `结果是:\n${optStr}`);
   dumpPool(ctx.group.groupId, ext, pool);
 }
@@ -161,7 +201,7 @@ function main() {
   // 注册扩展
   let ext = seal.ext.find('anchor');
   if (!ext) {
-    ext = seal.ext.new('anchor', '憧憬少', '1.1.1');
+    ext = seal.ext.new('anchor', '憧憬少', '1.2.0');
     seal.ext.register(ext);
   }
 
@@ -180,7 +220,7 @@ function main() {
           return seal.ext.newCmdExecuteResult(true);
         }
         case '+': {
-          const option = getTextArg(cmdArgs);
+          const option = getTextArg(cmdArgs).trim();
           akAdd(ctx, msg, ext, option);
           return seal.ext.newCmdExecuteResult(true);
         }
@@ -195,8 +235,9 @@ function main() {
         }
         case '=': {
           let num = 1;
-          if (cmdArgs.args.length >= 2) {
-            num = Number(getTextArg(cmdArgs));
+          let numN = Number(getTextArg(cmdArgs));
+          if (numN > 1) {
+            num = numN;
           }
           akGet(ctx, msg, ext, num);
           return seal.ext.newCmdExecuteResult(true);

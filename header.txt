@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         群内安价收集
 // @author       憧憬少
-// @version      1.1.1
+// @version      1.2.0
 // @description  在群内收集群友给出的安价选项，并掷骰得出结果。使用.ak help查看用法
 // @timestamp    1676767236
 // 2023-02-19 08:40:43
