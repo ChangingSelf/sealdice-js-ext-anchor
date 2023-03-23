@@ -1,14 +1,15 @@
 const HELP = `群内安价收集(ak是アンカー罗马字缩写)
-“.ak”也可以换成“.安价”，//后面是注释，不用写
+“.ak”也可以换成“.安价”，
 
-.ak help //查看帮助
-.ak#标题 //新建一轮分歧并设标题
-.ak+选项 //需要添加的选项的内容
-.ak+选项1|选项2|选项3 //多个选项用|分隔
-.ak-序号 //需要移除的选项的序号
-.ak? //列出目前所有选项
-.ak= //随机抽取1个选项并继续
-.ak=n //随机抽取n个选项并继续
+.ak help （查看帮助）
+.ak#标题 （新建一轮分歧并设标题）
+.ak+选项 （需要添加的选项的内容）
+.ak+选项1|选项2|选项3 （多个选项用|分隔）
+.ak-序号 （需要移除的选项的序号）
+.ak/ （除号，代表移除当前分歧，以便开始下一个）
+.ak? （列出目前所有选项）
+.ak= （随机抽取1个选项并继续）
+.ak=n （随机抽取n个选项并继续）
 `;
 
 const STORAGE_KEY = 'anchorPools';
@@ -181,6 +182,17 @@ function akGet(ctx: seal.MsgContext, msg: seal.Message, ext: seal.ExtInfo, num:n
   dumpPool(ctx.group.groupId, ext, pool);
 }
 
+//清除全部选项
+function akClear(ctx: seal.MsgContext, msg: seal.Message, ext: seal.ExtInfo) {
+  const pool = loadPool(ctx.group.groupId, ext);
+
+  akList(ctx, msg, ext);//移除之前会列出之前的
+  seal.replyToSender(ctx, msg, `已移除当前分歧：${pool.title}`);
+  pool.options = [];
+  pool.title = '';
+
+  dumpPool(ctx.group.groupId, ext, pool);
+}
 
 //获取文本参数
 function getTextArg(cmdArgs:seal.CmdArgs):string {
@@ -189,7 +201,7 @@ function getTextArg(cmdArgs:seal.CmdArgs):string {
 
 //获取操作参数
 function getOpArg(cmdArgs: seal.CmdArgs): string { 
-  let op = cmdArgs.rawArgs.match(/[#\-+=?？ ]/);
+  let op = cmdArgs.rawArgs.match(/[#\-/+=?？ ]/);
   if (op) {
     return op[0];
   } else {
@@ -227,6 +239,10 @@ function main() {
         case '-': {
           const index = Number(getTextArg(cmdArgs));
           akDel(ctx, msg, ext, index);
+          return seal.ext.newCmdExecuteResult(true);
+        }
+        case '/': {
+          akClear(ctx, msg, ext);
           return seal.ext.newCmdExecuteResult(true);
         }
         case '?':case '？': {
