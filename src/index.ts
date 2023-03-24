@@ -77,7 +77,7 @@ function akAdd(ctx: seal.MsgContext, msg: seal.Message, ext: seal.ExtInfo, optio
   const options = option.split("|");
   pool.options = pool.options.concat(options);
   if (options.length === 1) {
-    seal.replyToSender(ctx, msg, `当前分歧:${pool.title}\n已添加第${pool.options.length}个选项:${option}`);
+    seal.replyToSender(ctx, msg, `[CQ:reply,id=${msg.rawId}]当前分歧:${pool.title}\n已添加为第${pool.options.length}个选项`);
   } else {
     let i = pool.options.length - options.length + 1;
     let output = "";
@@ -94,8 +94,8 @@ function akAdd(ctx: seal.MsgContext, msg: seal.Message, ext: seal.ExtInfo, optio
 function akDel(ctx: seal.MsgContext, msg: seal.Message, ext: seal.ExtInfo, index: number) {
   const pool = loadPool(ctx.group.groupId, ext);
 
-  const removed = pool.options.splice(index-1, 1)[0];
-  seal.replyToSender(ctx, msg, `当前分歧:${pool.title}\n已移除第${index}个选项:${removed}`);
+  const removed:string = pool.options.splice(index-1, 1)[0];
+  seal.replyToSender(ctx, msg, `当前分歧:${pool.title}\n已移除第${index}个选项:${removed.slice(0,20)}${removed.length > 20?"...":""}`);
 
   dumpPool(ctx.group.groupId, ext, pool);
 }
